@@ -29,25 +29,25 @@ export const getExamples = (redisClient) => async (req, res, next) => {
     } = handleQueries(req);
     const regexMatch = searchExamplesRegexQuery(regexKeyword);
     const redisExamplesCacheKey = `example-${searchWord}-${skip}-${limit}`;
-    const redisExamplesCountCacheKey = `example-${searchWord}`;
-    const cachedExamples = await redisClient.get(redisExamplesCacheKey);
-    const cachedExamplesCount = await redisClient.get(redisExamplesCountCacheKey);
+    const rawCachedExamples = await redisClient.get(redisExamplesCacheKey);
+    const cachedExamples = typeof rawCachedExamples === 'string' ? JSON.parse(rawCachedExamples) : rawCachedExamples;
     let examples;
     let contentLength;
-    if (cachedExamples && cachedExamplesCount) {
-      examples = cachedExamples;
-      contentLength = cachedExamplesCount;
+    if (cachedExamples) {
+      examples = cachedExamples.examples;
+      contentLength = cachedExamples.contentLength;
     } else {
       const allExamples = await searchExamples({ query: regexMatch, skip, limit });
       examples = allExamples.examples;
       contentLength = allExamples.contentLength;
-      redisClient.set(redisExamplesCacheKey, JSON.stringify(allExamples.examples), 'EX', REDIS_CACHE_EXPIRATION);
-      redisClient.set(
-        redisExamplesCountCacheKey,
-        JSON.stringify(allExamples.contentLength),
-        'EX',
-        REDIS_CACHE_EXPIRATION,
-      );
+      if (searchWord) {
+        redisClient.set(
+          redisExamplesCacheKey,
+          JSON.stringify({ examples, contentLength }),
+          'EX',
+          REDIS_CACHE_EXPIRATION,
+        );
+      }
     }
 
     return packageResponse({
